@@ -5,14 +5,45 @@
     <title>testing canvas</title>
     <script type="application/javascript">
 
-        function draw() {
+        function paint_old(ctx, currentPath, currentPoint) {
+            currentPath.lineTo(currentPoint.x, currentPoint.y);
+            ctx.stroke(currentPath);
+        }
 
-            var canvas = document.getElementById("canvas");
+        function paint(ctx, currentPath, currentPoint, previousPoint, controlPoint) {
+            var distanceThreshold = 25;
+
+            // sample a 'control' point
+            if (controlPoint == null &&
+                    (Math.abs(currentPoint.x - previousPoint.x) > distanceThreshold/2 ||
+                    Math.abs(currentPoint.y - previousPoint.y) > distanceThreshold/2)) {
+                controlPoint = currentPoint;
+                console.log("changed controlPoint, x = " + controlPoint.x + ", y = ", controlPoint.y);
+            }
+
+            // only consider if at least 'distance' of 10 points from last value
+            // fixme only considering x or y independently... probably needs a 'distance' measure
+            if (Math.abs(currentPoint.x - previousPoint.x) > distanceThreshold || Math.abs(currentPoint.y - previousPoint.y) > distanceThreshold) {
+                currentPath.quadraticCurveTo(controlPoint.x, controlPoint.y, currentPoint.x, currentPoint.y);
+                ctx.stroke(currentPath);
+
+                // store previous point
+                previousPoint.x = currentPoint.x;
+                previousPoint.y = currentPoint.y;
+
+                // reset current and control point
+                controlPoint = null;
+            }
+
+            return controlPoint;
+        }
+
+        function draw_old() {
+            var canvas = document.getElementById("canvas_old");
 
             // store mouse position relative to this canvas
             // todo: use getBoundingClientRect() later
             var mouse = {x: 0, y: 0};
-            var previousPoint = {x: 0, y: 0};
 
             // change cursor type
             canvas.style.cursor = "crosshair";
@@ -24,28 +55,10 @@
                 var ctx = canvas.getContext("2d");
                 var currentPath = null;
 
-                window.addEventListener("keydown", function(e) {
-
-                    // is the <ESC> key pressed?
-                    if (e.keyCode == 27) {
-                        isMouseDown = false;
-                    }
-
-                    if (String.fromCharCode(e.keyCode || e.which) == "A") {
-                        currentPath = new Path2D();
-                        currentPath.moveTo(e.clientX, e.clientY);
-                        isMouseDown = true;
-                    }
-                });
-
                 canvas.addEventListener("mousedown", function(e) {
                     console.log("[mousedown] x, y = " + e.clientX + ", " + e.clientY);
                     mouse.x = e.pageX - this.offsetLeft;
                     mouse.y = e.pageY - this.offsetTop;
-
-                    // init previousPoint to current point
-                    previousPoint.x = mouse.x;
-                    previousPoint.y = mouse.y;
 
                     currentPath = new Path2D();
                     currentPath.moveTo(mouse.x, mouse.y);
@@ -55,38 +68,58 @@
                 canvas.addEventListener("mousemove", function(e) {
 
                     if (isMouseDown) {
-                        var rel_x = e.pageX - this.offsetLeft;
-                        var rel_y = e.pageY - this.offsetTop;
-                        var doConsider = false;
+                        paint_old(ctx, currentPath, {x: e.pageX - this.offsetLeft, y: e.pageY - this.offsetTop});
+                    }
+                });
 
-                        // only consider if at least 'distance' of 10 points from last value
-                        // fixme only considering x or y independently... probably needs a 'distance' measure
-                        if (rel_x - mouse.x > 10) {
-                            doConsider = true;
-                        }
-                        if (rel_y - mouse.y > 10) {
-                            doConsider = true;
-                        }
+                canvas.addEventListener("mouseup", function(e) {
+                    isMouseDown = false;
+                });
+            }
+        }
 
-                        if (doConsider) {
-                            // control point is midpoint of previous and current
-                            var ctrl_x = (previousPoint.x + mouse.x) / 2;
-                            var ctrl_y = (previousPoint.y + mouse.y) / 2;
+        function draw() {
 
-                            // store previous point
-                            previousPoint.x = mouse.x;
-                            previousPoint.y = mouse.y;
+            var canvas = document.getElementById("canvas");
 
-                            // reassign current point (i.e., endpoint)
-                            mouse.x = rel_x;
-                            mouse.y = rel_y;
+            // store mouse position relative to this canvas
+            // todo: use getBoundingClientRect() later
+            var mouse = {x: 0, y: 0};
+            var previousPoint = {x: 0, y: 0};
 
-                            console.log("[start] x = " + previousPoint.x + ", y = " + previousPoint.y);
-                            console.log("[end] x = " + mouse.x + ", y = " + mouse.y);
-                            currentPath.quadraticCurveTo(ctrl_x, ctrl_y, mouse.x, mouse.y);
-                            ctx.stroke(currentPath);
+            // store a control point, which wasn't considered to draw the curve per-se, but is stored for
+            // later drawing
+            var controlPoint = null;
 
-                        }
+            // change cursor type
+            canvas.style.cursor = "crosshair";
+
+            var isMouseDown = false;
+
+            if (canvas.getContext) {
+
+                var ctx = canvas.getContext("2d");
+                var currentPath = null;
+
+                canvas.addEventListener("mousedown", function(e) {
+                    console.log("[mousedown] x, y = " + e.clientX + ", " + e.clientY);
+
+                    // init previousPoint to current point
+                    mouse = {x: e.pageX - this.offsetLeft, y: e.pageY - this.offsetTop};
+
+                    currentPath = new Path2D();
+                    currentPath.moveTo(mouse.x, mouse.y);
+
+                    isMouseDown = true;
+                    controlPoint = null;
+                    previousPoint.x = mouse.x;
+                    previousPoint.y = mouse.y;
+                });
+
+                canvas.addEventListener("mousemove", function(e) {
+
+                    if (isMouseDown) {
+                        controlPoint = paint(ctx, currentPath, {x: e.pageX - this.offsetLeft, y: e.pageY - this.offsetTop}, previousPoint, controlPoint);
                     }
                 });
 
@@ -100,7 +133,8 @@
         canvas { border: 1px solid black; }
     </style>
 </head>
-<body onload="draw();">
+<body onload="draw();draw_old();">
     <canvas id="canvas" width="640" height="480"></canvas>
+    <canvas id="canvas_old" width="640" height="480"></canvas>
 </body>
 </html>
